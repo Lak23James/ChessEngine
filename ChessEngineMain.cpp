@@ -6,7 +6,7 @@ int main(){
     board.bitboard[BK] |= (1ULL << E8);
     board.print_board();
     return 0;
-}
+};
 
 
 

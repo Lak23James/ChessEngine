@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string>
 #include <cctype>
+#include "type.h"
 
 // WP=0, WN=1, WB=2, WR=3, WQ=4, WK=5, BP=6, BN=7, BB=8, BR=9, BQ=10, BK=11
 // 0 to 63 for squares A1 to H8 0-=> A1, 1=>B1, ..., 63=>H8
@@ -19,6 +20,7 @@ public:
       uint64_t occupied[3]={0};
       //
       uint64_t knight_attacks[64];
+      uint64_t king_attacks[64];
      //function to print the board
     void print_board() {
         std::cout << "\n";
@@ -89,21 +91,21 @@ public:
       }
       }
     //function to initialize knight attacks
-      void init_knights(){
+    void init_knights(){
       for(int square=0;square<64;square++)
       {uint64_t bitboard = (1ULL << square);
        uint64_t attacks = 0;
-       // 1. Up 2, Right 1 (Shift Left 17)
+       // 1. Up 2, Right 1 (Shift Left 17) (not on H file)
         if (bitboard & ~FILE_H) attacks |= (bitboard << 17);
-        // 2. Up 1, Right 2 (Shift Left 10)
+        // 2. Up 1, Right 2 (Shift Left 10) (not on GH file)
         if (bitboard & ~FILE_GH) attacks |= (bitboard << 10);
-        // 3. Up 2, Left 1 (Shift Left 15)
+        // 3. Up 2, Left 1 (Shift Left 15) (not on A file)
         if (bitboard & ~FILE_A) attacks |= (bitboard << 15);
-        // 4. Up 1, Left 2 (Shift Left 6) 
+        // 4. Up 1, Left 2 (Shift Left 6) (not on AB file)
         if (bitboard & ~FILE_AB) attacks |= (bitboard << 6);
-        // 5. Down 2, Right 1 (Moving RIGHT, needs H wall)
+        // 5. Down 2, Right 1 (Moving RIGHT, needs H wall) (Shift Right 15)
         if (bitboard & ~FILE_H) attacks |= (bitboard >> 15);
-        // 6. Down 1, Right 2 (Moving RIGHT, needs GH wall)
+        // 6. Down 1, Right 2 (Moving RIGHT, needs GH wall)  
         if (bitboard & ~FILE_GH) attacks |= (bitboard >> 6);
         // 7. Down 2, Left 1 (Moving LEFT, needs A wall)
         if (bitboard & ~FILE_A) attacks |= (bitboard >> 17);
@@ -112,11 +114,29 @@ public:
 
 
         knight_attacks[square] = attacks;
-      }
-       
+      }}
+    //function for moves of the king 
+    void init_kings(){
+      for(int square=0;square<64;square++)
+      {uint64_t bitboard = (1ULL << square);
+      uint64_t attacks = 0;
+      attacks |= (bitboard << 8); // Up
+      attacks |= (bitboard >> 8); // Down
+      // if not on H file, can move right
+      if(bitboard & ~FILE_H) {
+      attacks |= (bitboard << 1);// Right
+      attacks |= (bitboard << 9); // Up-Right
+      attacks |= (bitboard >> 7); // Down-Right
+      } 
+      // if not on A file, can move left
+      if(bitboard & ~FILE_A) 
+      {attacks |= (bitboard >> 1);// Left
+       attacks |= (bitboard << 7); // Up-Left
+       attacks |= (bitboard >> 9); // Down-Left
+      } 
+      king_attacks[square] = attacks;
 
-
-  }
+    }}
     
 
 
