@@ -21,6 +21,9 @@ public:
       //
       uint64_t knight_attacks[64];
       uint64_t king_attacks[64];
+      uint64_t rook_attacks[64];
+      uint64_t bishop_attacks[64];
+      uint64_t queen_attacks[64];
      //function to print the board
     void print_board() {
         std::cout << "\n";
@@ -49,7 +52,25 @@ public:
         }
         std::cout << "\n   a b c d e f g h\n\n";
     }
-   // The FEN Parser
+    void print_attacks(uint64_t mask) {
+    std::cout << "\n";
+    for (int rank = 7; rank >= 0; rank--) {
+        std::cout << rank + 1 << "  "; // Print the rank numbers on the left
+        for (int file = 0; file < 8; file++) {
+            int square = rank * 8 + file;
+            
+            // If the mask has a 1 at this exact square, print a 1. Otherwise, print a dot.
+            if (mask & (1ULL << square)) {
+                std::cout << "1 ";
+            } else {
+                std::cout << ". ";
+            }
+        }
+        std::cout << "\n"; // Move to the next line after finishing a rank
+    }
+    std::cout << "\n   a b c d e f g h\n\n"; // Print the file letters at the bottom
+}
+    // The FEN Parser
     void FEN(std::string fen) {
       // 1. Reset everything to zero before loading a new position
       for (int i = 0; i < 12; i++) bitboard[i] = 0ULL;
@@ -117,32 +138,100 @@ public:
       }}
     //function for moves of the king 
     void init_kings(){
-      for(int square=0;square<64;square++)
-      {uint64_t bitboard = (1ULL << square);
-      uint64_t attacks = 0;
-      attacks |= (bitboard << 8); // Up
-      attacks |= (bitboard >> 8); // Down
-      // if not on H file, can move right
-      if(bitboard & ~FILE_H) {
-      attacks |= (bitboard << 1);// Right
-      attacks |= (bitboard << 9); // Up-Right
-      attacks |= (bitboard >> 7); // Down-Right
-      } 
-      // if not on A file, can move left
-      if(bitboard & ~FILE_A) 
-      {attacks |= (bitboard >> 1);// Left
-       attacks |= (bitboard << 7); // Up-Left
-       attacks |= (bitboard >> 9); // Down-Left
-      } 
-      king_attacks[square] = attacks;
+      for(int square=0;square<64;square++) {
+        uint64_t bitboard = (1ULL << square);
+        uint64_t attacks = 0;
 
-    }}
+        attacks |= (bitboard << 8); // Up
+        attacks |= (bitboard >> 8); // Down
+
+        // if not on H file, can move right
+        if (bitboard & ~FILE_H) {
+          attacks |= (bitboard << 1);  // Right
+          attacks |= (bitboard << 9);  // Up-Right
+          attacks |= (bitboard >> 7);  // Down-Right
+        }
+
+        // if not on A file, can move left
+        if (bitboard & ~FILE_A) {
+          attacks |= (bitboard >> 1);  // Left
+          attacks |= (bitboard << 7);  // Up-Left
+          attacks |= (bitboard >> 9);  // Down-Left
+        }
+
+        king_attacks[square] = attacks;
+      }
+    }
+    //function to initialize rook attacks
+    void init_rooks(uint64_t block ,int rook_square ){
+         //Ray tracing
+         int rank=rook_square/8;
+         int file=rook_square%8;
+         for(int i=rank-1;i>=0;i--)
+            { rook_attacks[rook_square]|=(1ULL<<(i*8+file));
+              if((block & (1ULL << (i*8+file)))){
+                break;
+              }
+         
+          }
+          for(int i=rank+1;i<8;i++)
+              { rook_attacks[rook_square]|=(1ULL<<(i*8+file));
+                if((block & (1ULL << (i*8+file)))){
+                  break;
+                }
+          
+            }
+          for(int j=file-1;j>=0;j--)
+              { rook_attacks[rook_square]|=(1ULL<<(rank*8+j));
+                if((block & (1ULL << (rank*8+j)))){
+                  break;
+                }
+          
+            }
+          for(int j=file+1;j<8;j++)
+              { rook_attacks[rook_square]|=(1ULL<<(rank*8+j));
+                if((block & (1ULL << (rank*8+j)))){
+                  break;
+                }
+          
+            }
+          
+
+
+    }
+    //function to initialize bishop attacks
+    void init_bishops(uint64_t block, int square) {
+    int rank = square / 8;
+    int file = square % 8;
+
+    // Up-Right
+    for (int r = rank + 1, f = file + 1; r <= 7 && f <= 7; r++, f++) {
+        bishop_attacks[square] |= (1ULL << (r * 8 + f));
+        if (block & (1ULL << (r * 8 + f))) break;
+    }
+    // Down-Right
+    for (int r = rank - 1, f = file + 1; r >= 0 && f <= 7; r--, f++) {
+        bishop_attacks[square] |= (1ULL << (r * 8 + f));
+        if (block & (1ULL << (r * 8 + f))) break;
+    }
+    // Up-Left
+    for (int r = rank + 1, f = file - 1; r <= 7 && f >= 0; r++, f--) {
+        bishop_attacks[square] |= (1ULL << (r * 8 + f));
+        if (block & (1ULL << (r * 8 + f))) break;
+    }
+    // Down-Left
+    for (int r = rank - 1, f = file - 1; r >= 0 && f >= 0; r--, f--) {
+        bishop_attacks[square] |= (1ULL << (r * 8 + f));
+        if (block & (1ULL << (r * 8 + f))) break;
+    }
     
-
-
-
-
-
-
+}
+     // function to initialize queen attacks
+     //A queen's attacks are just the combination of rook and bishop attacks
+      void init_queens(uint64_t block, int square) {
+          init_rooks(block, square);
+          init_bishops(block, square);
+          queen_attacks[square] = rook_attacks[square] | bishop_attacks[square];
+      }
 };
-    
+ 
