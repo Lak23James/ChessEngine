@@ -24,6 +24,8 @@ public:
       uint64_t rook_attacks[64];
       uint64_t bishop_attacks[64];
       uint64_t queen_attacks[64];
+      uint64_t pawn_attacks_white[64];
+      uint64_t pawn_attacks_black[64];
      //function to print the board
     void print_board() {
         std::cout << "\n";
@@ -165,6 +167,7 @@ public:
     //function to initialize rook attacks
     void init_rooks(uint64_t block ,int rook_square ){
          //Ray tracing
+         rook_attacks[rook_square] = 0ULL;
          int rank=rook_square/8;
          int file=rook_square%8;
          for(int i=rank-1;i>=0;i--)
@@ -203,7 +206,7 @@ public:
     void init_bishops(uint64_t block, int square) {
     int rank = square / 8;
     int file = square % 8;
-
+    bishop_attacks[square] = 0ULL;
     // Up-Right
     for (int r = rank + 1, f = file + 1; r <= 7 && f <= 7; r++, f++) {
         bishop_attacks[square] |= (1ULL << (r * 8 + f));
@@ -233,5 +236,36 @@ public:
           init_bishops(block, square);
           queen_attacks[square] = rook_attacks[square] | bishop_attacks[square];
       }
+      //function to intialize pawn moves
+      void init_pawn_attacks() {
+      for (int sq = 0; sq < 64; sq++) {
+        uint64_t b = (1ULL << sq);
+        
+        uint64_t white_attacks = 0;
+        uint64_t black_attacks = 0;
+
+        // --- WHITE PAWNS (Shift Left / Add to index) ---
+        // Up-Left (+7). Mask: Cannot be on A-file.
+        if (b & ~FILE_A) white_attacks |= (b << 7);
+        
+        // Up-Right (+9). Mask: Cannot be on H-file.
+        if (b & ~FILE_H) white_attacks |= (b << 9);
+        
+        // --- BLACK PAWNS (Shift Right / Subtract from index) ---
+        // Down-Left (-9). Mask: Cannot be on A-file.
+        if (b & ~FILE_A) black_attacks |= (b >> 9);
+
+        // Down-Right (-7). Mask: Cannot be on H-file.
+        if (b & ~FILE_H) black_attacks |= (b >> 7);
+
+        pawn_attacks_white[sq] = white_attacks;
+        pawn_attacks_black[sq] = black_attacks;
+    }
+}
+
+
+  
+
+
 };
  
