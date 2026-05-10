@@ -1,9 +1,9 @@
-#include "bitboard.cpp"
+#include "bitboard.h"
 #include <iostream>
 int main(){
-    board_representation board;
-    board.bitboard[WK] |= (1ULL << E1);
-    board.bitboard[BK] |= (1ULL << E8);
+    Board board;
+    board.add_to_bitboard(WK, (1ULL << E1));
+    board.add_to_bitboard(BK, (1ULL << E8));
     board.init_kings();
     board.init_knights();
     std::cout << "King Attacks from D4:\n";
