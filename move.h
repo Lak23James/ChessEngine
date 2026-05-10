@@ -2,13 +2,22 @@
 #include <stdint.h>
 
 enum MoveFlags {
-    QUIET_MOVE = 0,         // Covers pawn pushes, knight jumps, etc.
-    DOUBLE_PAWN_PUSH = 1,
-    KING_CASTLE = 2,
-    QUEEN_CASTLE = 3,
-    CAPTURE = 4,
-    EN_PASSANT = 5,
-    // Future: PROMOTION_QUEEN = 8, etc.
+    QUIET_MOVE          = 0,  
+    DOUBLE_PAWN_PUSH    = 1,                                      
+    KING_CASTLE         = 2, 
+    QUEEN_CASTLE        = 3, 
+    CAPTURE_MOVE        = 4, 
+    EN_PASSANT          = 5, 
+    
+    PROMOTION_KNIGHT    = 8,  
+    PROMOTION_BISHOP    = 9,  
+    PROMOTION_ROOK      = 10, 
+    PROMOTION_QUEEN     = 11, 
+    
+    PROMOTION_CAPTURE_KNIGHT = 12,
+    PROMOTION_CAPTURE_BISHOP = 13,
+    PROMOTION_CAPTURE_ROOK   = 14,
+    PROMOTION_CAPTURE_QUEEN  = 15,
 };
 
 inline uint16_t encode_move(int from, int to, int flags) {

@@ -1,4 +1,5 @@
 #include "bitboard.h"
+#include <sstream>
 
 // Function to print the board
 void Board::print_board() {
@@ -32,42 +33,52 @@ void Board::print_board() {
 void Board::print_attacks(uint64_t mask) {
     std::cout << "\n";
     for (int rank = 7; rank >= 0; rank--) {
-        std::cout << rank + 1 << "  "; // Print the rank numbers on the left
+        std::cout << rank + 1 << "  ";
         for (int file = 0; file < 8; file++) {
             int square = rank * 8 + file;
 
-            // If the mask has a 1 at this exact square, print a 1. Otherwise, print a dot.
+            // Print 1 for attacked squares, dot for empty
             if (mask & (1ULL << square)) {
                 std::cout << "1 ";
             } else {
                 std::cout << ". ";
             }
         }
-        std::cout << "\n"; // Move to the next line after finishing a rank
+        std::cout << "\n";
     }
-    std::cout << "\n   a b c d e f g h\n\n"; // Print the file letters at the bottom
+    std::cout << "\n   a b c d e f g h\n\n";
 }
 
 // The FEN Parser
 void Board::FEN(const std::string& fen) {
-    // 1. Reset everything to zero before loading a new position
+    // Reset all bitboards and state
     for (int i = 0; i < 12; i++) bitboard[i] = 0ULL;
     for (int i = 0; i < 3; i++) occupied[i] = 0ULL;
+    
+    // Default to false before parsing
+    can_white_castle_king_side = false;
+    can_white_castle_queen_side = false;
+    can_black_castle_king_side = false;
+    can_black_castle_queen_side = false;
+    enpassentsq = NO_SQUARE;
+    halfmove_clock = 0;
 
+    std::istringstream ss(fen);
+    std::string piece_placement, active_color, castling, en_passant, halfmove, fullmove;
+    
+    // This cleanly splits the FEN string by spaces into 6 parts
+    ss >> piece_placement >> active_color >> castling >> en_passant >> halfmove >> fullmove;
+
+    // 1. Parse Piece Placement
     int rank = 7;
     int file = 0;
-    // 2. Iterate through each character of the FEN string
-    for (char c : fen) {
-        // Stop parsing the board if we hit a space
-        if (c == ' ') break;
-
+    for (char c : piece_placement) {
         if (c == '/') {
             rank--;
             file = 0;
         } else if (std::isdigit(static_cast<unsigned char>(c))) {
             file += (c - '0');
         } else {
-            // 3. Find which piece this character represents
             int piece_index = 0;
             for (int j = 0; j < 12; j++) {
                 if (ascii_pieces[j] == c) {
@@ -75,18 +86,43 @@ void Board::FEN(const std::string& fen) {
                     break;
                 }
             }
-            // Calculate the 0-63 index
-            // 4. Place the piece on the specific bitboard
             bitboard[piece_index] |= (1ULL << (rank * 8 + file));
-            // 5. Update occupancy bitboards
             occupied[piece_index / 6] |= (1ULL << (rank * 8 + file));
             occupied[BOTH] |= (1ULL << (rank * 8 + file));
-            file++; // Move to the next square
+            file++;
         }
     }
+
+    // 2. Parse Side to Move
+    if (active_color == "w") {
+        side_to_move = WHITE;
+    } else {
+        side_to_move = BLACK;
+    }
+
+    // 3. Parse Castling Rights
+    if (castling != "-") {
+        for (char c : castling) {
+            if (c == 'K') can_white_castle_king_side = true;
+            else if (c == 'Q') can_white_castle_queen_side = true;
+            else if (c == 'k') can_black_castle_king_side = true;
+            else if (c == 'q') can_black_castle_queen_side = true;
+        }
+    }
+
+    // 4. Parse En Passant
+    if (en_passant != "-") {
+        int ep_file = en_passant[0] - 'a';
+        int ep_rank = en_passant[1] - '1';
+        enpassentsq = ep_rank * 8 + ep_file;
+    }
+
+    // 5. Parse Halfmove clock (optional but good)
+    if (!halfmove.empty()) {
+        halfmove_clock = std::stoi(halfmove);
+    }
 }
-//Creating look up tables(LUT)
-// Function to initialize knight attacks
+// Precomputed lookup tables (LUT)
 void Board::init_knights() {
     for (int square = 0; square < 64; square++) {
         uint64_t bb = (1ULL << square);

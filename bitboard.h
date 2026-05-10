@@ -17,6 +17,13 @@ constexpr uint64_t RANK_7 = 0x00FF000000000000ULL;
 
 class Board {
 public:
+    int side_to_move=WHITE;       //stores whose turn it is to move
+    int enpassentsq=NO_SQUARE;  //stores the en passant square
+    bool can_white_castle_king_side=false;   //stores whether white can castle king side
+    bool can_white_castle_queen_side=false;  //stores whether white can castle queen side
+    bool can_black_castle_king_side=false;   //stores whether black can castle king side
+    bool can_black_castle_queen_side=false;  //stores whether black can castle queen side 
+    int halfmove_clock=0;    //stores the number of halfmoves since the last capture or pawn advance
     static constexpr uint64_t FILE_A  = 0x0101010101010101ULL;
     static constexpr uint64_t FILE_H  = 0x8080808080808080ULL;
     static constexpr uint64_t FILE_GH = 0xC0C0C0C0C0C0C0C0ULL;
