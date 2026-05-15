@@ -1,15 +1,4 @@
-#include "move.h"
-#include "bitboard.h"
-
-// Container for all generated moves
-struct MoveList {
-    uint16_t moves[256];
-    int count = 0;
-
-    void add_move(uint16_t move) {
-        moves[count++] = move;
-    }
-};
+#include "movesgen.h"
 
 void promotions(Board& board, MoveList& list, int side_to_move, int from_square, int to_square, bool is_capture) {
     if (side_to_move == WHITE && (from_square / 8 == 6)) {
@@ -346,8 +335,9 @@ bool Board::is_square_attacked(int square, int side) {
 
     if (side == WHITE) {
         // Check white pawn attacks on this square
+        // Use BLACK table: white pawns are BELOW and attack UPWARD into this square
         uint64_t white_pawns = bitboard[WP];
-        if (pawn_attacks_white[square] & white_pawns) return true;
+        if (pawn_attacks_black[square] & white_pawns) return true;
 
         // Check white knight attacks
         uint64_t white_knights = bitboard[WN];
@@ -370,8 +360,9 @@ bool Board::is_square_attacked(int square, int side) {
         return false;
     } else {
         // Check black pawn attacks on this square
+        // Use WHITE table: black pawns are ABOVE and attack DOWNWARD into this square
         uint64_t black_pawns = bitboard[BP];
-        if (pawn_attacks_black[square] & black_pawns) return true;
+        if (pawn_attacks_white[square] & black_pawns) return true;
 
         // Check black knight attacks
         uint64_t black_knights = bitboard[BN];
@@ -699,4 +690,30 @@ uint64_t perft(Board& board, int depth) {
         }
     }
     return nodes;
+}
+
+void perft_divide(Board& board, int depth) {
+    std::cout << "\n--- Perft Divide Depth " << depth << " ---\n";
+    MoveList list;
+    generate_moves(board, list);
+    
+    uint64_t total_nodes = 0;
+    for (int i = 0; i < list.count; i++) {
+        if (board.make_move(list.moves[i])) {
+            uint64_t nodes = perft(board, depth - 1);
+            int from = get_move_from(list.moves[i]);
+            int to = get_move_to(list.moves[i]);
+            
+            char file_from = 'a' + (from % 8);
+            char rank_from = '1' + (from / 8);
+            char file_to = 'a' + (to % 8);
+            char rank_to = '1' + (to / 8);
+            
+            std::cout << file_from << rank_from << file_to << rank_to << ": " << nodes << "\n";
+            total_nodes += nodes;
+            
+            board.unmake_move(list.moves[i]);
+        }
+    }
+    std::cout << "\nTotal Nodes: " << total_nodes << "\n";
 }

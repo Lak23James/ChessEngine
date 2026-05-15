@@ -1,6 +1,5 @@
 #include "bitboard.h"
 #include <sstream>
-
 // Function to print the board
 void Board::print_board() {
     std::cout << "\n";
@@ -70,9 +69,11 @@ void Board::FEN(const std::string& fen) {
         if (c == '/') {
             rank--;
             file = 0;
-        } else if (std::isdigit(static_cast<unsigned char>(c))) {
+        }
+         else if (std::isdigit(static_cast<unsigned char>(c))) {
             file += (c - '0');
-        } else {
+        }
+         else {
             int piece_index = 0;
             for (int j = 0; j < 12; j++) {
                 if (ascii_pieces[j] == c) {
@@ -149,7 +150,6 @@ void Board::init_kings() {
     for (int square = 0; square < 64; square++) {
         uint64_t bb = (1ULL << square);
         uint64_t attacks = 0;
-
         attacks |= (bb << 8); // Up
         attacks |= (bb >> 8); // Down
 
