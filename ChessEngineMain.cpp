@@ -1,25 +1,27 @@
 #include "bitboard.h"
+#include "move.h"
 #include <iostream>
-int main(){
+
+// Forward declare perft function from movesgen.cpp
+uint64_t perft(Board& board, int depth);
+
+int main() {
+    init_zobrist();
     Board board;
-    board.add_to_bitboard(WK, (1ULL << E1));
-    board.add_to_bitboard(BK, (1ULL << E8));
+
+    // Call init functions!
     board.init_kings();
     board.init_knights();
-    std::cout << "King Attacks from D4:\n";
-    board.print_attacks(board.king_attacks[27]);
-    std::cout << "Knight Attacks from D4:\n";
-    board.print_attacks(board.knight_attacks[27]);
-    board.print_board();
+    board.init_pawn_attacks();
+
+    board.FEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+
+    int depth = 5;
+    std::cout << "Starting Perft to Depth " << depth << "...\n";
+    uint64_t nodes = perft(board, depth);
+    
+    std::cout << "Nodes: " << nodes << "\n";
+    std::cout << "Target for Depth 4: 197281\n";
+
     return 0;
-};
-
-
-
-
-
-
-
-
-
-
+}

@@ -10,14 +10,7 @@ void Board::print_board() {
 
         for (int file = 0; file < 8; file++) {
             int square = rank * 8 + file;
-            int piece_on_this_square = -1;
-
-            for (int piece = WP; piece <= BK; piece++) {
-                if (bitboard[piece] & (1ULL << square)) {
-                    piece_on_this_square = piece;
-                    break;
-                }
-            }
+            int piece_on_this_square = piece_on_square[square];
 
             if (piece_on_this_square == -1) {
                 std::cout << ". ";
@@ -54,6 +47,7 @@ void Board::FEN(const std::string& fen) {
     // Reset all bitboards and state
     for (int i = 0; i < 12; i++) bitboard[i] = 0ULL;
     for (int i = 0; i < 3; i++) occupied[i] = 0ULL;
+    for (int i = 0; i < 64; i++) piece_on_square[i] = -1;
     
     // Default to false before parsing
     can_white_castle_king_side = false;
@@ -86,9 +80,11 @@ void Board::FEN(const std::string& fen) {
                     break;
                 }
             }
-            bitboard[piece_index] |= (1ULL << (rank * 8 + file));
-            occupied[piece_index / 6] |= (1ULL << (rank * 8 + file));
-            occupied[BOTH] |= (1ULL << (rank * 8 + file));
+            int square = rank * 8 + file;
+            bitboard[piece_index] |= (1ULL << square);
+            occupied[piece_index / 6] |= (1ULL << square);
+            occupied[BOTH] |= (1ULL << square);
+            piece_on_square[square] = piece_index;
             file++;
         }
     }
@@ -176,95 +172,99 @@ void Board::init_kings() {
 }
 
 // Function to initialize rook attacks
-void Board::init_rooks(uint64_t block, int rook_square) {
-    // Ray tracing
-    rook_attacks[rook_square] = 0ULL;
+// 1. Change 'void' to 'uint64_t'
+uint64_t Board::get_rook_attacks(uint64_t block, int rook_square) {
+    
+    // 2. Create a temporary local variable instead of touching the array
+    uint64_t current_attacks = 0ULL; 
     int rank = rook_square / 8;
     int file = rook_square % 8;
+    
     for (int i = rank - 1; i >= 0; i--) {
-        rook_attacks[rook_square] |= (1ULL << (i * 8 + file));
-        if ((block & (1ULL << (i * 8 + file)))) {
-            break;
-        }
+        current_attacks |= (1ULL << (i * 8 + file));
+        if ((block & (1ULL << (i * 8 + file)))) break;
     }
     for (int i = rank + 1; i < 8; i++) {
-        rook_attacks[rook_square] |= (1ULL << (i * 8 + file));
-        if ((block & (1ULL << (i * 8 + file)))) {
-            break;
-        }
+        current_attacks |= (1ULL << (i * 8 + file));
+        if ((block & (1ULL << (i * 8 + file)))) break;
     }
     for (int j = file - 1; j >= 0; j--) {
-        rook_attacks[rook_square] |= (1ULL << (rank * 8 + j));
-        if ((block & (1ULL << (rank * 8 + j)))) {
-            break;
-        }
+        current_attacks |= (1ULL << (rank * 8 + j));
+        if ((block & (1ULL << (rank * 8 + j)))) break;
     }
     for (int j = file + 1; j < 8; j++) {
-        rook_attacks[rook_square] |= (1ULL << (rank * 8 + j));
-        if ((block & (1ULL << (rank * 8 + j)))) {
-            break;
-        }
+        current_attacks |= (1ULL << (rank * 8 + j));
+        if ((block & (1ULL << (rank * 8 + j)))) break;
     }
+    
+    // 3. Return the calculated mask directly
+    return current_attacks;
 }
 
-// Function to initialize bishop attacks
-void Board::init_bishops(uint64_t block, int square) {
+// Function to generate bishop attacks on the fly (Pure Function - Safe for Search)
+uint64_t Board::get_bishop_attacks(uint64_t block, int square) {
+    uint64_t current_attacks = 0ULL;
     int rank = square / 8;
     int file = square % 8;
-    bishop_attacks[square] = 0ULL;
+    
     // Up-Right
     for (int r = rank + 1, f = file + 1; r <= 7 && f <= 7; r++, f++) {
-        bishop_attacks[square] |= (1ULL << (r * 8 + f));
+        current_attacks |= (1ULL << (r * 8 + f));
         if (block & (1ULL << (r * 8 + f))) break;
     }
     // Down-Right
     for (int r = rank - 1, f = file + 1; r >= 0 && f <= 7; r--, f++) {
-        bishop_attacks[square] |= (1ULL << (r * 8 + f));
+        current_attacks |= (1ULL << (r * 8 + f));
         if (block & (1ULL << (r * 8 + f))) break;
     }
     // Up-Left
     for (int r = rank + 1, f = file - 1; r <= 7 && f >= 0; r++, f--) {
-        bishop_attacks[square] |= (1ULL << (r * 8 + f));
+        current_attacks |= (1ULL << (r * 8 + f));
         if (block & (1ULL << (r * 8 + f))) break;
     }
     // Down-Left
     for (int r = rank - 1, f = file - 1; r >= 0 && f >= 0; r--, f--) {
-        bishop_attacks[square] |= (1ULL << (r * 8 + f));
+        current_attacks |= (1ULL << (r * 8 + f));
         if (block & (1ULL << (r * 8 + f))) break;
     }
+    
+    return current_attacks;
 }
 
-// Function to initialize queen attacks
-// A queen's attacks are just the combination of rook and bishop attacks
-void Board::init_queens(uint64_t block, int square) {
-    init_rooks(block, square);
-    init_bishops(block, square);
-    queen_attacks[square] = rook_attacks[square] | bishop_attacks[square];
-}
-
-// Function to initialize pawn moves
+// Function to initialize pawn attacks
 void Board::init_pawn_attacks() {
-    for (int sq = 0; sq < 64; sq++) {
-        uint64_t b = (1ULL << sq);
-
+    for (int square = 0; square < 64; square++) {
+        uint64_t bb = (1ULL << square);
         uint64_t white_attacks = 0;
         uint64_t black_attacks = 0;
-
-        // --- WHITE PAWNS (Shift Left / Add to index) ---
-        // Up-Left (+7). Mask: Cannot be on A-file.
-        if (b & ~FILE_A) white_attacks |= (b << 7);
-
-        // Up-Right (+9). Mask: Cannot be on H-file.
-        if (b & ~FILE_H) white_attacks |= (b << 9);
-
-        // --- BLACK PAWNS (Shift Right / Subtract from index) ---
-        // Down-Left (-9). Mask: Cannot be on A-file.
-        if (b & ~FILE_A) black_attacks |= (b >> 9);
-
-        // Down-Right (-7). Mask: Cannot be on H-file.
-        if (b & ~FILE_H) black_attacks |= (b >> 7);
-
-        pawn_attacks_white[sq] = white_attacks;
-        pawn_attacks_black[sq] = black_attacks;
+        
+        int rank = square / 8;
+        int file = square % 8;
+        
+        // White pawns attack diagonally upward
+        if (rank < 7) {  // Not on rank 8
+            if (file > 0) {  // Can attack to the left
+                white_attacks |= (bb << 7);
+            }
+            if (file < 7) {  // Can attack to the right
+                white_attacks |= (bb << 9);
+            }
+        }
+        
+        // Black pawns attack diagonally downward
+        if (rank > 0) {  // Not on rank 1
+            if (file > 0) {  // Can attack to the left
+                black_attacks |= (bb >> 9);
+            }
+            if (file < 7) {  // Can attack to the right
+                black_attacks |= (bb >> 7);
+            }
+        }
+        
+        pawn_attacks_white[square] = white_attacks;
+        pawn_attacks_black[square] = black_attacks;
     }
 }
+
+
+
