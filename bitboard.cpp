@@ -1,5 +1,4 @@
 #include "bitboard.h"
-#include "uci.h"
 #include <sstream>
 
 // Function to print the board
@@ -60,6 +59,7 @@ void Board::FEN(const std::string &fen) {
   can_black_castle_queen_side = false;
   enpassentsq = NO_SQUARE;
   halfmove_clock = 0;
+  state_ply = 0;
 
   std::istringstream ss(fen);
   std::string piece_placement, active_color, castling, en_passant, halfmove,
@@ -190,7 +190,7 @@ void Board::init_kings() {
 
 // Function to initialize rook attacks
 // 1. Change 'void' to 'uint64_t'
-uint64_t Board::get_rook_attacks(uint64_t block, int rook_square) {
+uint64_t Board::get_rook_attacks(uint64_t block, int rook_square) const {
 
   // 2. Create a temporary local variable instead of touching the array
   uint64_t current_attacks = 0ULL;
@@ -224,7 +224,7 @@ uint64_t Board::get_rook_attacks(uint64_t block, int rook_square) {
 
 // Function to generate bishop attacks on the fly (Pure Function - Safe for
 // Search)
-uint64_t Board::get_bishop_attacks(uint64_t block, int square) {
+uint64_t Board::get_bishop_attacks(uint64_t block, int square) const {
   uint64_t current_attacks = 0ULL;
   int rank = square / 8;
   int file = square % 8;

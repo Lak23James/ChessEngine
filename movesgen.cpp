@@ -1,5 +1,4 @@
 #include "movesgen.h"
-#include "uci.h"
 
 void promotions(Board& board, MoveList& list, int side_to_move, int from_square, int to_square, bool is_capture) {
     if (side_to_move == WHITE && (from_square / 8 == 6)) {
@@ -330,7 +329,7 @@ void generate_moves(Board& board, MoveList& list) {
 }
 
 // Check if a square is attacked by the given side
-bool Board::is_square_attacked(int square, int side) {
+bool Board::is_square_attacked(int square, int side) const {
     uint64_t target = 1ULL << square;
     uint64_t all_occupied = occupied[BOTH];
 

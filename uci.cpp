@@ -7,10 +7,15 @@
 // ============================================================================
 
 #include "uci.h"
+#include "bitboard.h"
+#include "movesgen.h"
+#include "search.h"
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
+#include <cstdlib>
+#include <ctime>
 
 // ============================================================================
 // Constants
@@ -32,6 +37,96 @@ static std::vector<std::string> tokenize(const std::string& line) {
     return tokens;
 }
 
+static int uci_square_index(const std::string& square) {
+    if (square.size() != 2) return -1;
+    int file = square[0] - 'a';
+    int rank = square[1] - '1';
+    if (file < 0 || file > 7 || rank < 0 || rank > 7) return -1;
+    return rank * 8 + file;
+}
+
+static bool promotion_matches(uint16_t move, char promotion_char) {
+    int flags = get_move_flags(move);
+    if (promotion_char == '\0') {
+        return flags < PROMOTION_KNIGHT;
+    }
+    switch (promotion_char) {
+        case 'q': return flags == PROMOTION_QUEEN || flags == PROMOTION_CAPTURE_QUEEN;
+        case 'r': return flags == PROMOTION_ROOK   || flags == PROMOTION_CAPTURE_ROOK;
+        case 'b': return flags == PROMOTION_BISHOP || flags == PROMOTION_CAPTURE_BISHOP;
+        case 'n': return flags == PROMOTION_KNIGHT || flags == PROMOTION_CAPTURE_KNIGHT;
+        default:  return false;
+    }
+}
+
+static std::string uci_move_to_string(uint16_t move) {
+    static const char file_chars[] = "abcdefgh";
+    int from = get_move_from(move);
+    int to = get_move_to(move);
+    std::string text;
+    text += file_chars[from % 8];
+    text += char('1' + (from / 8));
+    text += file_chars[to % 8];
+    text += char('1' + (to / 8));
+
+    int flags = get_move_flags(move);
+    switch (flags) {
+        case PROMOTION_KNIGHT:
+        case PROMOTION_CAPTURE_KNIGHT: text += 'n'; break;
+        case PROMOTION_BISHOP:
+        case PROMOTION_CAPTURE_BISHOP: text += 'b'; break;
+        case PROMOTION_ROOK:
+        case PROMOTION_CAPTURE_ROOK:   text += 'r'; break;
+        case PROMOTION_QUEEN:
+        case PROMOTION_CAPTURE_QUEEN:  text += 'q'; break;
+        default: break;
+    }
+    return text;
+}
+
+static uint16_t parse_uci_move(Board& board, const std::string& move_string) {
+    if (move_string.size() < 4) return 0;
+    int from_square = uci_square_index(move_string.substr(0, 2));
+    int to_square   = uci_square_index(move_string.substr(2, 2));
+    char promotion_char = move_string.size() == 5 ? move_string[4] : '\0';
+    if (from_square < 0 || to_square < 0) return 0;
+
+    MoveList list;
+    generate_moves(board, list);
+    for (int i = 0; i < list.count; i++) {
+        uint16_t candidate = list.moves[i];
+        if (get_move_from(candidate) != from_square || get_move_to(candidate) != to_square) {
+            continue;
+        }
+        if (!promotion_matches(candidate, promotion_char)) {
+            continue;
+        }
+        return candidate;
+    }
+    return 0;
+}
+
+static std::string get_random_legal_move(Board& board) {
+    MoveList list;
+    generate_moves(board, list);
+
+    std::vector<uint16_t> legal_moves;
+    for (int i = 0; i < list.count; i++) {
+        uint16_t move = list.moves[i];
+        if (board.make_move(move)) {
+            legal_moves.push_back(move);
+            board.unmake_move(move);
+        }
+    }
+
+    if (legal_moves.empty()) {
+        return "";
+    }
+
+    uint16_t chosen = legal_moves[std::rand() % legal_moves.size()];
+    return uci_move_to_string(chosen);
+}
+
 // ============================================================================
 // parse_position
 // ============================================================================
@@ -41,61 +136,43 @@ static std::vector<std::string> tokenize(const std::string& line) {
 //   position fen <fen_string>
 //   position fen <fen_string> moves e2e4 e7e5 ...
 // ============================================================================
-void UCI::parse_position(const std::string& command) {
+void UCI::parse_position(Board& board, const std::string& command) {
     std::vector<std::string> tokens = tokenize(command);
     if (tokens.size() < 2) return;
 
-    size_t moves_index = 0;  // index where "moves" token appears (0 = not found)
-
+    // 1. Reset the Board First
     if (tokens[1] == "startpos") {
-        // ------------------------------------------------------------------
-        // TODO: Reset board to starting position
-        // board.FEN(START_FEN);
-        // ------------------------------------------------------------------
-        moves_index = 2;  // "moves" would be at index 2 if present
-
+        board.FEN(START_FEN);
     } else if (tokens[1] == "fen") {
-        // Reconstruct the FEN string from tokens[2..7]
-        // A full FEN has 6 fields: pieces, side, castling, ep, halfmove, fullmove
-        std::string fen = "";
-        size_t fen_end = 2;
-        for (size_t i = 2; i < tokens.size() && i < 8; i++) {
-            if (tokens[i] == "moves") break;
-            if (!fen.empty()) fen += " ";
-            fen += tokens[i];
-            fen_end = i + 1;
+        std::string fen;
+        size_t token_index = 2;
+        // Collect all parts of the FEN until we hit "moves" or end of command
+        while (token_index < tokens.size() && tokens[token_index] != "moves") {
+            if (!fen.empty()) fen += ' ';
+            fen += tokens[token_index];
+            token_index++;
         }
-
-        // ------------------------------------------------------------------
-        // TODO: Set up board from the parsed FEN
-        // board.FEN(fen);
-        // ------------------------------------------------------------------
-
-        moves_index = fen_end;  // "moves" token would be here
+        board.FEN(fen);
     }
 
-    // Now look for the "moves" token and apply each move
-    if (moves_index < tokens.size() && tokens[moves_index] == "moves") {
-        for (size_t i = moves_index + 1; i < tokens.size(); i++) {
-            std::string move_string = tokens[i];
+    // 2 & 3. Locate "moves" keyword and Parse Move Stream
+    size_t moves_start = 0;
+    for (size_t i = 0; i < tokens.size(); i++) {
+        if (tokens[i] == "moves") {
+            moves_start = i + 1;
+            break;
+        }
+    }
 
-            // --------------------------------------------------------------
-            // TODO: Parse the move string and apply it to the board.
-            //
-            // move_string is in UCI long algebraic notation:
-            //   "e2e4", "e7e5", "e1g1" (castling), "e7e8q" (promotion)
-            //
-            // You need a helper function that:
-            //   1. Extracts from_square (e.g., "e2" -> file=4, rank=1 -> sq=12)
-            //   2. Extracts to_square   (e.g., "e4" -> file=4, rank=3 -> sq=28)
-            //   3. Detects promotion char if present (5th character: q/r/b/n)
-            //   4. Finds the matching move in the legal move list
-            //   5. Calls board.make_move(matched_move)
-            //
-            // Example implementation:
-            //   uint16_t parsed = parse_uci_move(board, move_string);
-            //   board.make_move(parsed);
-            // --------------------------------------------------------------
+    // 4. Convert and Execute
+    if (moves_start > 0) {
+        for (size_t i = moves_start; i < tokens.size(); i++) {
+            std::string move_string = tokens[i];
+            uint16_t move = parse_uci_move(board, move_string);
+            if (move != 0) {
+                // Apply move permanently to the game state
+                board.make_move(move);
+            }
         }
     }
 }
@@ -111,7 +188,7 @@ void UCI::parse_position(const std::string& command) {
 //   go infinite
 //   go nodes 1000000
 // ============================================================================
-void UCI::parse_go(const std::string& command) {
+void UCI::parse_go(Board& board, const std::string& command) {
     std::vector<std::string> tokens = tokenize(command);
 
     int depth      = -1;  // -1 means not specified
@@ -134,33 +211,22 @@ void UCI::parse_go(const std::string& command) {
         if (tokens[i] == "infinite") infinite = true;
     }
 
-    // If no depth was given, use a sensible default
-    if (depth == -1 && !infinite) {
-        depth = 6;  // Default search depth — adjust as engine matures
+   // If no depth was specified, set a safe limit
+if (depth == -1) {
+    if (infinite) {
+        depth = 4; // True infinite needs iterative deepening, but depth 7 is a safe ceiling for now!
+    } else {
+        depth = 5; // Default blitz depth
     }
-
-    // ------------------------------------------------------------------
-    // TODO: Call your search function here.
-    //
-    // Example:
-    //   uint16_t best_move = search(board, depth);
-    //
-    // After the search completes, you MUST print the best move in UCI
-    // long algebraic notation:
-    //
-    //   std::cout << "bestmove " << move_to_uci_string(best_move) << std::endl;
-    //
-    // During search, you should also print "info" lines:
-    //   std::cout << "info depth " << d
-    //             << " score cp " << eval
-    //             << " nodes " << nodes
-    //             << " pv " << pv_string << std::endl;
-    // ------------------------------------------------------------------
-
-    // Placeholder output so the GUI doesn't hang:
-    std::cout << "info string search not implemented yet" << std::endl;
-    std::cout << "bestmove e2e4" << std::endl;
 }
+
+search_position(board, depth);
+uint16_t best_move = get_best_move_found();
+if (best_move == 0) {
+    std::cout << "bestmove 0000" << std::endl;
+} else {
+    std::cout << "bestmove " << uci_move_to_string(best_move) << std::endl;
+}}
 
 // ============================================================================
 // loop — The main UCI event loop
@@ -168,7 +234,7 @@ void UCI::parse_go(const std::string& command) {
 // Reads from std::cin line by line and dispatches commands.
 // This function blocks forever until "quit" is received.
 // ============================================================================
-void UCI::loop() {
+void UCI::loop(Board& board) {
     std::string line;
 
     // Print the engine identity on startup (some GUIs expect this immediately)
@@ -204,29 +270,21 @@ void UCI::loop() {
             std::cout << "uciok" << std::endl;
         }
 
-        // ===== isready =====
-        else if (command_word == "isready") {
-            // The engine must respond "readyok" after finishing any pending work.
-            // Since we have no async tasks yet, respond immediately.
-            std::cout << "readyOk" << std::endl;
+            else if (command_word == "isready") {
+            std::cout << "readyok" << std::endl;
         }
 
-       if (command == "ucinewgame") {
-    // We will clear the Hash Tables here later when we build them.
-    // For now, just reset the board to the starting position.
-    
-   
-    board.parse_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"); 
-}
+        else if (command_word == "ucinewgame") {
+            board.FEN(START_FEN);
+        }
 
-        // ===== position =====
         else if (command_word == "position") {
-            parse_position(line);
+            parse_position(board, line);
         }
 
         // ===== go =====
         else if (command_word == "go") {
-            parse_go(line);
+            parse_go(board, line);
         }
 
         // ===== stop =====

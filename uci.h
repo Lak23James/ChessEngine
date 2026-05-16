@@ -1,14 +1,15 @@
 #pragma once
 
 #include <string>
+#include "bitboard.h"
 
 namespace UCI {
     // Main UCI loop — listens on stdin forever until "quit"
-    void loop();
+    void loop(Board& board);
 
     // Parses "position startpos moves ..." or "position fen ... moves ..."
-    void parse_position(const std::string& command);
+    void parse_position(Board& board, const std::string& command);
 
     // Parses "go depth X" and other go parameters
-    void parse_go(const std::string& command);
+    void parse_go(Board& board, const std::string& command);
 }
