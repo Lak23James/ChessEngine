@@ -1,103 +1,107 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Chessboard } from 'react-chessboard';
 import { Chess } from 'chess.js';
 
-export default function PlayVsEngine() {
-  const [game, setGame] = useState(new Chess());
-  const [engineReady, setEngineReady] = useState(false);
-  const workerRef = useRef<Worker | null>(null);
+export default function Home() {
+  const game = useRef(new Chess());
+  const worker = useRef<Worker | null>(null);
+  const from = useRef<string | null>(null);
+
+  const [fen, setFen] = useState('start');
+  const [ready, setReady] = useState(false);
+  const [msg, setMsg] = useState('Booting engine...');
 
   useEffect(() => {
-    // 1. Boot up the Web Worker
-    workerRef.current = new Worker('/engine.worker.js');
+    const w = new Worker('/engine.worker.js');
+    worker.current = w;
 
-    workerRef.current.onmessage = (e) => {
+    w.onmessage = (e) => {
       if (e.data.type === 'ready') {
-        setEngineReady(true);
-      } 
-      // 2. Listen for the Engine's response
-      else if (e.data.type === 'move') {
-        const moveString = e.data.move; // e.g. "e2e4"
-        
-        if (moveString && moveString !== "none") {
-          const newGame = new Chess(game.fen());
-          try {
-            // Apply engine's move to our frontend board
-            newGame.move({
-              from: moveString.substring(0, 2),
-              to: moveString.substring(2, 4),
-              promotion: moveString.length > 4 ? moveString[4] : undefined
-            });
-            setGame(newGame);
-          } catch (err) {
-            console.error("Engine generated an illegal move!", moveString);
-          }
-        } else {
-            console.log("Game Over or Engine error.");
+        setReady(true);
+        setMsg('Your move (White)');
+      }
+      if (e.data.type === 'move') {
+        const mv: string = e.data.move;
+        if (mv && mv !== 'none') {
+          game.current.move({ from: mv.slice(0, 2), to: mv.slice(2, 4), promotion: 'q' });
+          setFen(game.current.fen());
+          setMsg('Your move (White)');
         }
       }
     };
 
-    return () => {
-      if (workerRef.current) workerRef.current.terminate();
-    };
-  }, [game]);
+    return () => w.terminate();
+  }, []);
 
-  // 3. Handle Human Moves (White)
-  function onDrop(sourceSquare: string, targetSquare: string, piece: string) {
-    if (!engineReady || game.turn() !== 'w') return false; // Wait for engine
-
-    const newGame = new Chess(game.fen());
-    
-    // Auto-queen promotions for simplicity
-    const isPromotion = piece[1] === 'P' && targetSquare[1] === '8';
-
+  function makeMove(src: string, dst: string): boolean {
     try {
-      const move = newGame.move({
-        from: sourceSquare,
-        to: targetSquare,
-        promotion: isPromotion ? 'q' : undefined 
-      });
-
-      if (move === null) return false;
-      
-      setGame(newGame);
-
-      // 4. Send the new Board State (FEN) to the C++ Engine Worker
-      if (!newGame.isGameOver()) {
-        workerRef.current?.postMessage({ 
-            type: 'calculate', 
-            fen: newGame.fen() 
-        });
-      }
-
+      const result = game.current.move({ from: src, to: dst, promotion: 'q' });
+      if (!result) return false;
+      setFen(game.current.fen());
+      setMsg('Engine thinking...');
+      worker.current?.postMessage({ type: 'calculate', fen: game.current.fen() });
       return true;
-    } catch (e) {
-      return false; // Invalid move
+    } catch {
+      return false;
     }
   }
 
-  return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white font-sans">
-      <h1 className="text-3xl font-bold mb-4">Play vs C++ Engine</h1>
-      
-      {!engineReady && (
-        <p className="text-yellow-400 mb-4 animate-pulse">
-            Booting WebAssembly Engine...
-        </p>
-      )}
+  function onSquareClick(square: string) {
+    if (!ready || game.current.turn() !== 'w') return;
 
-      <div className="w-[500px] shadow-2xl rounded-sm overflow-hidden border-4 border-gray-700">
-        <Chessboard 
-          position={game.fen()} 
-          onPieceDrop={onDrop} 
-          boardOrientation="white"
-          customDarkSquareStyle={{ backgroundColor: '#779556' }}
-          customLightSquareStyle={{ backgroundColor: '#ebecd0' }}
+    if (!from.current) {
+      // select piece
+      const piece = game.current.get(square as any);
+      if (piece && piece.color === 'w') {
+        from.current = square;
+        setMsg(`Selected ${square} — now click destination`);
+      }
+    } else {
+      // attempt move
+      const success = makeMove(from.current, square);
+      from.current = null;
+      if (!success) setMsg('Invalid move — pick a piece');
+    }
+  }
+
+  function onDrop(src: string, tgt: string): boolean {
+    if (!ready) return false;
+    return makeMove(src, tgt);
+  }
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: '#1a1a2e',
+      color: 'white',
+      fontFamily: 'sans-serif',
+      gap: '12px',
+      padding: '16px',
+      boxSizing: 'border-box',
+    }}>
+      <h2 style={{ margin: 0 }}>Play vs C++ Engine</h2>
+
+      <p style={{ margin: 0, color: ready ? '#4ade80' : '#facc15', fontSize: 14 }}>
+        {ready ? '✅ Engine ready' : '⏳ Loading...'}
+      </p>
+
+      <div style={{ width: 400, flexShrink: 0 }}>
+        <Chessboard
+          id="board"
+          position={fen}
+          boardWidth={400}
+          onPieceDrop={onDrop}
+          onSquareClick={onSquareClick as any}
         />
       </div>
+
+      <p style={{ margin: 0, color: '#aaa', fontSize: 13 }}>{msg}</p>
     </div>
   );
 }

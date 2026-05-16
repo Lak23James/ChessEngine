@@ -3,25 +3,39 @@ importScripts('/engine.js'); // Load the Emscripten glue code
 
 let engineInstance = null;
 
+console.log("Worker: Starting engine initialization...");
+
 // Initialize the WASM module
-createEngine().then((instance) => {
+createEngine({
+  locateFile: function(path) {
+    if (path.endsWith('.wasm')) {
+      return '/' + path;
+    }
+    return path;
+  }
+}).then((instance) => {
+    console.log("Worker: Engine initialized successfully!");
     engineInstance = instance;
     postMessage({ type: 'ready' }); // Tell React the engine is booted
+}).catch(err => {
+    console.error("Worker: Engine initialization failed", err);
+    postMessage({ type: 'error', message: err ? err.toString() : "Unknown error" });
 });
 
 self.onmessage = function(e) {
     if (e.data.type === 'calculate' && engineInstance) {
-        const fen = e.data.fen;
-        
-        // Call our C++ function: const char* get_random_legal_move(char* fen)
-        const move = engineInstance.ccall(
-            'get_random_legal_move', // C++ function name
-            'string',                // Return type
-            ['string'],              // Argument types
-            [fen]                    // Arguments
-        );
-        
-        // Send the move back to React (e.g. "e2e4")
-        postMessage({ type: 'move', move: move });
+        try {
+            const fen = e.data.fen;
+            const move = engineInstance.ccall(
+                'get_random_legal_move',
+                'string',
+                ['string'],
+                [fen]
+            );
+            postMessage({ type: 'move', move: move });
+        } catch (err) {
+            console.error("Worker: Calculation failed", err);
+            postMessage({ type: 'error', message: err.toString() });
+        }
     }
 };

@@ -391,7 +391,7 @@ bool Board::make_move(uint16_t move) {
     int to_sq = get_move_to(move);
     int flag = get_move_flags(move);
 
-    int moving_piece = piece_on_square[from_sq];
+    int moving_piece = piece_on_square[from_sq]; 
     if (moving_piece == -1) return false;
 
     int original_side = side_to_move;
