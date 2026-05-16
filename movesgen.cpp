@@ -1,4 +1,5 @@
 #include "movesgen.h"
+#include "uci.h"
 
 void promotions(Board& board, MoveList& list, int side_to_move, int from_square, int to_square, bool is_capture) {
     if (side_to_move == WHITE && (from_square / 8 == 6)) {
@@ -676,7 +677,7 @@ void Board::unmake_move(uint16_t move) {
     }
 }
 
-uint64_t perft(Board& board, int depth) {
+/*uint64_t perft(Board& board, int depth) {
     if (depth == 0) return 1ULL;
     
     MoveList list;
@@ -692,28 +693,28 @@ uint64_t perft(Board& board, int depth) {
     return nodes;
 }
 
-void perft_divide(Board& board, int depth) {
-    std::cout << "\n--- Perft Divide Depth " << depth << " ---\n";
-    MoveList list;
-    generate_moves(board, list);
-    
-    uint64_t total_nodes = 0;
-    for (int i = 0; i < list.count; i++) {
-        if (board.make_move(list.moves[i])) {
-            uint64_t nodes = perft(board, depth - 1);
-            int from = get_move_from(list.moves[i]);
-            int to = get_move_to(list.moves[i]);
-            
-            char file_from = 'a' + (from % 8);
-            char rank_from = '1' + (from / 8);
-            char file_to = 'a' + (to % 8);
-            char rank_to = '1' + (to / 8);
-            
-            std::cout << file_from << rank_from << file_to << rank_to << ": " << nodes << "\n";
-            total_nodes += nodes;
-            
-            board.unmake_move(list.moves[i]);
-        }
-    }
-    std::cout << "\nTotal Nodes: " << total_nodes << "\n";
-}
+// void perft_divide(Board& board, int depth) {
+//     std::cout << "\n--- Perft Divide Depth " << depth << " ---\n";
+//     MoveList list;
+//     generate_moves(board, list);
+//     
+//     uint64_t total_nodes = 0;
+//     for (int i = 0; i < list.count; i++) {
+//         if (board.make_move(list.moves[i])) {
+//             uint64_t nodes = perft(board, depth - 1);
+//             int from = get_move_from(list.moves[i]);
+//             int to = get_move_to(list.moves[i]);
+//             
+//             char file_from = 'a' + (from % 8);
+//             char rank_from = '1' + (from / 8);
+//             char file_to = 'a' + (to % 8);
+//             char rank_to = '1' + (to / 8);
+//             
+//             std::cout << file_from << rank_from << file_to << rank_to << ": " << nodes << "\n";
+//             total_nodes += nodes;
+//             
+//             board.unmake_move(list.moves[i]);
+//         }
+//     }
+//     std::cout << "\nTotal Nodes: " << total_nodes << "\n";
+// }*/
