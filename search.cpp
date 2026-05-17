@@ -2,9 +2,56 @@
 #include "bitboard.h"
 #include "evaluate.h"
 #include "movesgen.h"
+#include "tt.h"
 #include <algorithm>
 
 using Move = uint16_t;
+
+// Definition of the transposition table declared in tt.h
+TTEntry tt[TT_SIZE];
+
+// Global variable to store the best move found at the root
+Move best_move_found = 0;
+
+// Probe TT
+static bool probe_tt(uint64_t key, int depth, int alpha, int beta, int& score, int& best_move) {
+    int index = key % TT_SIZE;
+    TTEntry& entry = tt[index];
+
+    if (entry.key == key) {
+        best_move = entry.best_move;
+        if (entry.depth >= depth) {
+            if (entry.flag == TT_EXACT) {
+                score = entry.score;
+                return true;
+            }
+            if (entry.flag == TT_ALPHA && entry.score <= alpha) {
+                score = alpha;
+                return true;
+            }
+            if (entry.flag == TT_BETA && entry.score >= beta) {
+                score = beta;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Store TT
+static void store_tt(uint64_t key, int depth, int score, int flag, int best_move) {
+    int index = key % TT_SIZE;
+    TTEntry& entry = tt[index];
+
+    // Depth-preferred replacement strategy
+    if (entry.key != key || entry.depth <= depth) {
+        entry.key = key;
+        entry.score = score;
+        entry.depth = depth;
+        entry.flag = flag;
+        entry.best_move = best_move;
+    }
+}
 
 static inline bool is_king_in_check(const Board &board) {
   int king_square = -1;
@@ -40,9 +87,6 @@ static MoveList generate_legal_moves(Board &board) {
   return result;
 }
 
-// Global variable to store the best move found at the root
-Move best_move_found = 0;
-
 // Approximate centipawn values for Delta Pruning and MVV-LVA
 const int PIECE_VALUES[12] = {
     100, 320, 330,
@@ -51,11 +95,17 @@ const int PIECE_VALUES[12] = {
     500, 900, 20000 // Black: Pawn, Knight, Bishop, Rook, Queen, King
 };
 
-// MVV-LVA move ordering helper
-static void sort_moves(const Board &board, MoveList &list) {
+// MVV-LVA move ordering helper (prioritizes tt_move above all other captures)
+static void sort_moves(const Board &board, MoveList &list, int tt_move = 0) {
   int scores[256] = {0};
   for (int i = 0; i < list.count; i++) {
     Move move = list.moves[i];
+
+    if (move == tt_move) {
+      scores[i] = 100000;
+      continue;
+    }
+
     int flags = get_move_flags(move);
     int from = get_move_from(move);
     int to = get_move_to(move);
@@ -189,6 +239,13 @@ static int quiescence(int alpha, int beta, Board &board) {
 
 // 2. NEGAMAX ALPHA-BETA (Internal Helper - Static Linkage)
 static int alpha_beta(Board &board, int depth, int alpha, int beta) {
+  // 1. TT PROBE
+  int tt_score = 0;
+  int tt_move = 0;
+  if (probe_tt(board.hash_key, depth, alpha, beta, tt_score, tt_move)) {
+    return tt_score;
+  }
+
   if (depth == 0) {
     return quiescence(alpha, beta, board);
   }
@@ -201,7 +258,11 @@ static int alpha_beta(Board &board, int depth, int alpha, int beta) {
     return 0;
   }
 
-  sort_moves(board, moves);
+  // 2. MOVE ORDERING (Prioritize TT move if available)
+  sort_moves(board, moves, tt_move);
+
+  int original_alpha = alpha;
+  int best_move = 0;
 
   for (int i = 0; i < moves.count; ++i) {
     Move move = moves.moves[i];
@@ -210,12 +271,20 @@ static int alpha_beta(Board &board, int depth, int alpha, int beta) {
     board.unmake_move(move);
 
     if (score >= beta) {
+      // 3. STORE TT (BETA CUTOFF)
+      store_tt(board.hash_key, depth, beta, TT_BETA, move);
       return beta;
     }
     if (score > alpha) {
       alpha = score;
+      best_move = move;
     }
   }
+
+  // 4. STORE TT (EXACT or ALPHA)
+  int flag = (alpha <= original_alpha) ? TT_ALPHA : TT_EXACT;
+  store_tt(board.hash_key, depth, alpha, flag, best_move);
+
   return alpha;
 }
 
@@ -230,7 +299,12 @@ void search_position(Board &board, int depth) {
     return;
   }
 
-  sort_moves(board, moves);
+  // Probe root for TT move to prioritize it immediately
+  int dummy_score;
+  int tt_move = 0;
+  probe_tt(board.hash_key, depth, alpha, beta, dummy_score, tt_move);
+
+  sort_moves(board, moves, tt_move);
 
   Move best_move_so_far = moves.moves[0];
   for (int i = 0; i < moves.count; ++i) {
@@ -246,6 +320,8 @@ void search_position(Board &board, int depth) {
   }
 
   best_move_found = best_move_so_far;
+  // Also record the final absolute best move chosen at root into TT
+  store_tt(board.hash_key, depth, alpha, TT_EXACT, best_move_so_far);
 }
 
 uint16_t get_best_move_found() { return best_move_found; }

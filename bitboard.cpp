@@ -132,7 +132,7 @@ void Board::FEN(const std::string &fen) {
   // Set the initial hash_key using Zobrist Hashing
   this->hash_key = generate_hash();
   this->history[state_ply].hash_key = this->hash_key;
-
+}
 
 uint64_t Board::generate_hash() const {
   uint64_t h = 0ULL;
