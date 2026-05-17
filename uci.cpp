@@ -214,7 +214,7 @@ void UCI::parse_go(Board& board, const std::string& command) {
    // If no depth was specified, set a safe limit
 if (depth == -1) {
     if (infinite) {
-        depth = 4; // True infinite needs iterative deepening, but depth 7 is a safe ceiling for now!
+        depth = 7; // True infinite needs iterative deepening, but depth 7 is a safe ceiling for now!
     } else {
         depth = 5; // Default blitz depth
     }

@@ -3,6 +3,7 @@
 
 // Function to print the board
 void Board::print_board() {
+
   std::cout << "\n";
 
   for (int rank = 7; rank >= 0; rank--) {
@@ -127,6 +128,41 @@ void Board::FEN(const std::string &fen) {
   if (!halfmove.empty()) {
     halfmove_clock = std::stoi(halfmove);
   }
+
+  // Set the initial hash_key using Zobrist Hashing
+  this->hash_key = generate_hash();
+  this->history[state_ply].hash_key = this->hash_key;
+
+
+uint64_t Board::generate_hash() const {
+  uint64_t h = 0ULL;
+
+  // 1. XOR all active pieces into the hash
+  for (int sq = 0; sq < 64; sq++) {
+    int piece = piece_on_square[sq];
+    if (piece != -1) {
+      h ^= piece_keys[piece][sq];
+    }
+  }
+
+  // 2. XOR the active side key if it is Black's turn
+  if (side_to_move == BLACK) {
+    h ^= side_key;
+  }
+
+  // 3. XOR the active castling rights key
+  int castling_rights = (can_white_castle_king_side  ? 1 : 0) | 
+                        (can_white_castle_queen_side ? 2 : 0) | 
+                        (can_black_castle_king_side  ? 4 : 0) | 
+                        (can_black_castle_queen_side ? 8 : 0);
+  h ^= castle_keys[castling_rights];
+
+  // 4. XOR the en passant square key if it exists
+  if (enpassentsq != NO_SQUARE) {
+    h ^= enpassant_keys[enpassentsq];
+  }
+
+  return h;
 }
 // Precomputed lookup tables (LUT)
 void Board::init_knights() {

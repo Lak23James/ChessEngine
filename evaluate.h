@@ -1,3 +1,5 @@
+
+
 #ifndef EVALUATE_H
 #define EVALUATE_H
 
@@ -12,4 +14,4 @@ int evaluate(const Board& board);
 
 } // namespace PSQT
 
-#endif
+#endif // EVALUATE_H
