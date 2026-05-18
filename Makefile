@@ -1,17 +1,21 @@
 CXX = g++
 CXXFLAGS = -O3 -std=c++17 -Wall -Wextra
 
-SRCS = main.cpp bitboard.cpp evaluate.cpp search.cpp uci.cpp movesgen.cpp zobrist.cpp
-OBJS = $(SRCS:.cpp=.o)
-TARGET = engine
+SRCS = $(wildcard src/*.cpp)
+OBJS = $(patsubst src/%.cpp, build/%.o, $(SRCS))
+TARGET = build/engine.exe
 
-all: $(TARGET)
+all: build_dir $(TARGET)
+
+build_dir:
+	@if not exist build mkdir build
 
 $(TARGET): $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $(TARGET) $(OBJS)
 
-%.o: %.cpp
+build/%.o: src/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	@if exist build rmdir /s /q build
+

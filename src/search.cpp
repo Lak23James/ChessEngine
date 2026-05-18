@@ -3,10 +3,10 @@
 #include "evaluate.h"
 #include "movesgen.h"
 #include "tt.h"
+#include "uci.h"
 #include <algorithm>
 #include <chrono>
 #include <iostream>
-#include "uci.h"
 
 // Timing controls
 std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
@@ -15,12 +15,14 @@ bool time_is_up = false;
 long long nodes_searched = 0;
 
 void check_time() {
-    auto now = std::chrono::high_resolution_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
-    
-    if (elapsed >= allocated_time_ms) {
-        time_is_up = true;
-    }
+  auto now = std::chrono::high_resolution_clock::now();
+  auto elapsed =
+      std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time)
+          .count();
+
+  if (elapsed >= allocated_time_ms) {
+    time_is_up = true;
+  }
 }
 using Move = uint16_t;
 
@@ -31,43 +33,45 @@ TTEntry tt[TT_SIZE];
 Move best_move_found = 0;
 
 // Probe TT
-static bool probe_tt(uint64_t key, int depth, int alpha, int beta, int& score, int& best_move) {
-    int index = key % TT_SIZE;
-    TTEntry& entry = tt[index];
+static bool probe_tt(uint64_t key, int depth, int alpha, int beta, int &score,
+                     int &best_move) {
+  int index = key % TT_SIZE;
+  TTEntry &entry = tt[index];
 
-    if (entry.key == key) {
-        best_move = entry.best_move;
-        if (entry.depth >= depth) {
-            if (entry.flag == TT_EXACT) {
-                score = entry.score;
-                return true;
-            }
-            if (entry.flag == TT_ALPHA && entry.score <= alpha) {
-                score = alpha;
-                return true;
-            }
-            if (entry.flag == TT_BETA && entry.score >= beta) {
-                score = beta;
-                return true;
-            }
-        }
+  if (entry.key == key) {
+    best_move = entry.best_move;
+    if (entry.depth >= depth) {
+      if (entry.flag == TT_EXACT) {
+        score = entry.score;
+        return true;
+      }
+      if (entry.flag == TT_ALPHA && entry.score <= alpha) {
+        score = alpha;
+        return true;
+      }
+      if (entry.flag == TT_BETA && entry.score >= beta) {
+        score = beta;
+        return true;
+      }
     }
-    return false;
+  }
+  return false;
 }
 
 // Store TT
-static void store_tt(uint64_t key, int depth, int score, int flag, int best_move) {
-    int index = key % TT_SIZE;
-    TTEntry& entry = tt[index];
+static void store_tt(uint64_t key, int depth, int score, int flag,
+                     int best_move) {
+  int index = key % TT_SIZE;
+  TTEntry &entry = tt[index];
 
-    // Depth-preferred replacement strategy
-    if (entry.key != key || entry.depth <= depth) {
-        entry.key = key;
-        entry.score = score;
-        entry.depth = depth;
-        entry.flag = flag;
-        entry.best_move = best_move;
-    }
+  // Depth-preferred replacement strategy
+  if (entry.key != key || entry.depth <= depth) {
+    entry.key = key;
+    entry.score = score;
+    entry.depth = depth;
+    entry.flag = flag;
+    entry.best_move = best_move;
+  }
 }
 
 static inline bool is_king_in_check(const Board &board) {
@@ -160,17 +164,17 @@ static void sort_moves(const Board &board, MoveList &list, int tt_move = 0) {
 static int quiescence(int alpha, int beta, Board &board) {
   nodes_searched++;
   if ((nodes_searched & 2047) == 0 && allocated_time_ms > 0) {
-      check_time();
+    check_time();
   }
-  if (time_is_up) return 0;
+  if (time_is_up)
+    return 0;
 
   bool in_check = is_king_in_check(board);
   int stand_pat = 0;
 
   // Standing Pat (Safety net)
   if (!in_check) {
-    int color_multiplier = (board.side_to_move == WHITE) ? 1 : -1;
-    stand_pat = PSQT::evaluate(board) * color_multiplier;
+    stand_pat = evaluate(board);
     if (stand_pat >= beta) {
       return beta;
     }
@@ -252,7 +256,7 @@ static int quiescence(int alpha, int beta, Board &board) {
     }
   }
 
-  // Terminal Node Detection
+  // Termination of quiescence search: If we are in check and have no legal moves, this is a checkmate.
   if (in_check && legal_moves_played == 0) {
     return -100000;
   }
@@ -264,15 +268,24 @@ static int quiescence(int alpha, int beta, Board &board) {
 int alpha_beta(Board &board, int depth, int alpha, int beta) {
   nodes_searched++;
   if ((nodes_searched & 2047) == 0 && allocated_time_ms > 0) {
-      check_time();
+    check_time();
   }
-  if (time_is_up) return 0;
+  if (time_is_up)
+    return 0;
 
   // 1. TT PROBE
+  if (!time_is_up) { // ADD THIS WRAPPER
+    write_to_TT(board.hash_key, depth, alpha, FLAG_EXACT, best_move);
+}
+return alpha;
+ // 1. TT PROBE
   int tt_score = 0;
   int tt_move = 0;
+  
+  // If the TT finds a valid entry with sufficient depth and valid bounds, 
+  // it returns true. We immediately use that score.
   if (probe_tt(board.hash_key, depth, alpha, beta, tt_score, tt_move)) {
-    return tt_score;
+      return tt_score; 
   }
 
   if (depth == 0) {
@@ -308,6 +321,7 @@ int alpha_beta(Board &board, int depth, int alpha, int beta) {
       alpha = score;
       best_move = move;
     }
+    
   }
 
   // 4. STORE TT (EXACT or ALPHA)
@@ -319,29 +333,33 @@ int alpha_beta(Board &board, int depth, int alpha, int beta) {
 
 // 3. ROOT SEARCH (Public Interface - External Linkage)
 void search_position(Board &board, int max_time_ms) {
-    allocated_time_ms = max_time_ms;
-    time_is_up = false;
-    nodes_searched = 0;
-    start_time = std::chrono::high_resolution_clock::now();
+  allocated_time_ms = max_time_ms;
+  time_is_up = false;
+  nodes_searched = 0;
+  start_time = std::chrono::high_resolution_clock::now();
 
-    int best_move_overall = 0;
+  int best_move_overall = 0;
 
-    for (int current_depth = 1; current_depth <= 64; ++current_depth) {
-        int current_score = alpha_beta(board, current_depth, -500000, 500000);
-        
-        if (time_is_up) break;
+  for (int current_depth = 1; current_depth <= 64; ++current_depth) {
+    int current_score = alpha_beta(board, current_depth, -500000, 500000);
 
-        // If the depth completed successfully, look up the current position's board.hash_key in our TT array
-        int index = board.hash_key % TT_SIZE;
-        if (tt[index].key == board.hash_key && tt[index].best_move != 0) {
-            best_move_overall = tt[index].best_move;
-            best_move_found = tt[index].best_move;
-        }
+    if (time_is_up)
+      break;
 
-        std::cout << "info depth " << current_depth << " score cp " << current_score << std::endl;
+    // If the depth completed successfully, look up the current position's
+    // board.hash_key in our TT array
+    int index = board.hash_key % TT_SIZE;
+    if (tt[index].key == board.hash_key && tt[index].best_move != 0) {
+      best_move_overall = tt[index].best_move;
+      best_move_found = tt[index].best_move;
     }
 
-    std::cout << "bestmove " << uci_move_to_string(best_move_overall) << std::endl;
+    std::cout << "info depth " << current_depth << " score cp " << current_score
+              << std::endl;
+  }
+
+  std::cout << "bestmove " << uci_move_to_string(best_move_overall)
+            << std::endl;
 }
 
 uint16_t get_best_move_found() { return best_move_found; }

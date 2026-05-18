@@ -5,7 +5,6 @@
 #include <ctime>
 
 int main() {
-  PSQT::init();
   init_zobrist();
   std::srand(static_cast<unsigned int>(std::time(nullptr)));
 
