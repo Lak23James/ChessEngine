@@ -1,0 +1,16 @@
+# Compiled binaries
+engine.exe
+*.exe
+*.o
+*.obj
+
+# Virtual environments and dependencies
+.venv/
+__pycache__/
+
+# Lichess bot and secrets
+lichess-bot/
+config.yml
+
+# IDE files
+.vscode/

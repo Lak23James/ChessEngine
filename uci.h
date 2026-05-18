@@ -13,3 +13,5 @@ namespace UCI {
     // Parses "go depth X" and other go parameters
     void parse_go(Board& board, const std::string& command);
 }
+
+std::string uci_move_to_string(uint16_t move);

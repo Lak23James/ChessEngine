@@ -59,7 +59,7 @@ static bool promotion_matches(uint16_t move, char promotion_char) {
     }
 }
 
-static std::string uci_move_to_string(uint16_t move) {
+std::string uci_move_to_string(uint16_t move) {
     static const char file_chars[] = "abcdefgh";
     int from = get_move_from(move);
     int to = get_move_to(move);
@@ -211,22 +211,33 @@ void UCI::parse_go(Board& board, const std::string& command) {
         if (tokens[i] == "infinite") infinite = true;
     }
 
-   // If no depth was specified, set a safe limit
-if (depth == -1) {
-    if (infinite) {
-        depth = 7; // True infinite needs iterative deepening, but depth 7 is a safe ceiling for now!
+    // Time management logic
+    int max_time_ms = 0;
+    if (movetime != -1) {
+        max_time_ms = movetime;
     } else {
-        depth = 5; // Default blitz depth
+        int time_left = (board.side_to_move == WHITE) ? wtime : btime;
+        int inc = (board.side_to_move == WHITE) ? winc : binc;
+        
+        if (time_left != -1) {
+            max_time_ms = time_left / 30; // Allocate roughly 1/30th of remaining time
+            if (inc != -1) max_time_ms += inc / 2;
+            if (max_time_ms > time_left) max_time_ms = time_left - 100;
+        }
     }
-}
+    
+    // Safety for allocated time
+    if (max_time_ms > 0 && max_time_ms < 50) max_time_ms = 50; 
+    // Fallback if no time provided
+    if (max_time_ms <= 0 && depth == -1 && !infinite) {
+        max_time_ms = 5000; // default 5 seconds if completely unbounded
+    }
+    if (infinite) {
+        max_time_ms = 1000 * 60 * 60; // 1 hour for infinite
+    }
 
-search_position(board, depth);
-uint16_t best_move = get_best_move_found();
-if (best_move == 0) {
-    std::cout << "bestmove 0000" << std::endl;
-} else {
-    std::cout << "bestmove " << uci_move_to_string(best_move) << std::endl;
-}}
+    search_position(board, max_time_ms);
+}
 
 // ============================================================================
 // loop — The main UCI event loop

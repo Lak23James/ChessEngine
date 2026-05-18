@@ -11,4 +11,4 @@ struct TTEntry {
     int best_move;     // The integer representing the best move found here
 };
 const int TT_SIZE = 1048576;
-extern TTEntry tt[TT_SIZE];
+extern TTEntry tt[TT_SIZE]; 

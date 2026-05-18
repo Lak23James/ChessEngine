@@ -4,7 +4,24 @@
 #include "movesgen.h"
 #include "tt.h"
 #include <algorithm>
+#include <chrono>
+#include <iostream>
+#include "uci.h"
 
+// Timing controls
+std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
+int allocated_time_ms = 0;
+bool time_is_up = false;
+long long nodes_searched = 0;
+
+void check_time() {
+    auto now = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
+    
+    if (elapsed >= allocated_time_ms) {
+        time_is_up = true;
+    }
+}
 using Move = uint16_t;
 
 // Definition of the transposition table declared in tt.h
@@ -141,6 +158,12 @@ static void sort_moves(const Board &board, MoveList &list, int tt_move = 0) {
 
 // 1. QUIESCENCE SEARCH (Internal Helper - Static Linkage)
 static int quiescence(int alpha, int beta, Board &board) {
+  nodes_searched++;
+  if ((nodes_searched & 2047) == 0 && allocated_time_ms > 0) {
+      check_time();
+  }
+  if (time_is_up) return 0;
+
   bool in_check = is_king_in_check(board);
   int stand_pat = 0;
 
@@ -238,7 +261,13 @@ static int quiescence(int alpha, int beta, Board &board) {
 }
 
 // 2. NEGAMAX ALPHA-BETA (Internal Helper - Static Linkage)
-static int alpha_beta(Board &board, int depth, int alpha, int beta) {
+int alpha_beta(Board &board, int depth, int alpha, int beta) {
+  nodes_searched++;
+  if ((nodes_searched & 2047) == 0 && allocated_time_ms > 0) {
+      check_time();
+  }
+  if (time_is_up) return 0;
+
   // 1. TT PROBE
   int tt_score = 0;
   int tt_move = 0;
@@ -289,39 +318,30 @@ static int alpha_beta(Board &board, int depth, int alpha, int beta) {
 }
 
 // 3. ROOT SEARCH (Public Interface - External Linkage)
-void search_position(Board &board, int depth) {
-  int alpha = -500000;
-  int beta = 500000;
+void search_position(Board &board, int max_time_ms) {
+    allocated_time_ms = max_time_ms;
+    time_is_up = false;
+    nodes_searched = 0;
+    start_time = std::chrono::high_resolution_clock::now();
 
-  MoveList moves = generate_legal_moves(board);
-  if (moves.count == 0) {
-    best_move_found = 0;
-    return;
-  }
+    int best_move_overall = 0;
 
-  // Probe root for TT move to prioritize it immediately
-  int dummy_score;
-  int tt_move = 0;
-  probe_tt(board.hash_key, depth, alpha, beta, dummy_score, tt_move);
+    for (int current_depth = 1; current_depth <= 64; ++current_depth) {
+        int current_score = alpha_beta(board, current_depth, -500000, 500000);
+        
+        if (time_is_up) break;
 
-  sort_moves(board, moves, tt_move);
+        // If the depth completed successfully, look up the current position's board.hash_key in our TT array
+        int index = board.hash_key % TT_SIZE;
+        if (tt[index].key == board.hash_key && tt[index].best_move != 0) {
+            best_move_overall = tt[index].best_move;
+            best_move_found = tt[index].best_move;
+        }
 
-  Move best_move_so_far = moves.moves[0];
-  for (int i = 0; i < moves.count; ++i) {
-    Move move = moves.moves[i];
-    board.make_move(move);
-    int score = -alpha_beta(board, depth - 1, -beta, -alpha);
-    board.unmake_move(move);
-
-    if (score > alpha) {
-      alpha = score;
-      best_move_so_far = move;
+        std::cout << "info depth " << current_depth << " score cp " << current_score << std::endl;
     }
-  }
 
-  best_move_found = best_move_so_far;
-  // Also record the final absolute best move chosen at root into TT
-  store_tt(board.hash_key, depth, alpha, TT_EXACT, best_move_so_far);
+    std::cout << "bestmove " << uci_move_to_string(best_move_overall) << std::endl;
 }
 
 uint16_t get_best_move_found() { return best_move_found; }
