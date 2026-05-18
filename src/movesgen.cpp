@@ -506,7 +506,7 @@ bool Board::make_move(uint16_t move) {
             hash_key ^= piece_keys[BR][rook_from];
             hash_key ^= piece_keys[BR][rook_to];
         }
-    } else if (flag >= PROMOTION_KNIGHT && flag <= PROMOTION_QUEEN) {
+    } else if (flag >= PROMOTION_KNIGHT && flag <= PROMOTION_CAPTURE_QUEEN) {
         was_promotion = true;
         bitboard[moving_piece] &= ~(1ULL << to_sq);
         hash_key ^= piece_keys[moving_piece][to_sq];
@@ -626,7 +626,7 @@ void Board::unmake_move(uint16_t move) {
     int moving_piece = piece_on_square[to_sq];
 
     // If it was a promotion, the moving piece we are putting back is a Pawn
-    if (flag >= PROMOTION_KNIGHT && flag <= PROMOTION_QUEEN) {
+    if (flag >= PROMOTION_KNIGHT && flag <= PROMOTION_CAPTURE_QUEEN) {
         bitboard[moving_piece] &= ~(1ULL << to_sq); // Remove promoted piece from to_sq
         moving_piece = (side_to_move == WHITE) ? WP : BP;
         bitboard[moving_piece] |= (1ULL << to_sq); // Place pawn on to_sq so XOR works correctly

@@ -150,7 +150,7 @@ static void sort_moves(const Board &board, MoveList &list, int tt_move = 0) {
       }
     } else if (flags == EN_PASSANT) {
       score = 100 * 10 - 100 + 1000;
-    } else if (flags >= PROMOTION_KNIGHT && flags <= PROMOTION_QUEEN) {
+    } else if (flags >= PROMOTION_KNIGHT && flags <= PROMOTION_CAPTURE_QUEEN) {
       score = 900;
     }
     scores[i] = score;
@@ -175,6 +175,9 @@ static int quiescence(int alpha, int beta, Board &board) {
   }
   if (time_is_up)
     return 0;
+
+  // Prevent Quiescence Search / Check explosions from overflowing arrays
+  if (board.state_ply >= 2000) return evaluate(board);
 
   bool in_check = is_king_in_check(board);
   int stand_pat = 0;
@@ -279,6 +282,10 @@ int alpha_beta(Board &board, int depth, int alpha, int beta) {
   }
   if (time_is_up)
     return 0;
+
+  // Prevent deep check sequences from overflowing the history array
+  if (board.state_ply >= 2000) return evaluate(board);
+
  // 1. TT PROBE
   int tt_score = 0;
   int tt_move = 0;

@@ -5,6 +5,10 @@
 #include <ctime>
 
 int main() {
+  // Disable buffering for standard I/O to prevent GUI hangs on Windows
+  setbuf(stdout, NULL);
+  setbuf(stdin, NULL);
+
   init_zobrist();
   std::srand(static_cast<unsigned int>(std::time(nullptr)));
 

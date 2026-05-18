@@ -203,14 +203,27 @@ void UCI::parse_go(Board& board, const std::string& command) {
     bool infinite  = false;
 
     for (size_t i = 1; i < tokens.size(); i++) {
-        if (tokens[i] == "depth"     && i + 1 < tokens.size()) depth     = std::stoi(tokens[++i]);
-        if (tokens[i] == "movetime"  && i + 1 < tokens.size()) movetime  = std::stoi(tokens[++i]);
-        if (tokens[i] == "wtime"     && i + 1 < tokens.size()) wtime     = std::stoi(tokens[++i]);
-        if (tokens[i] == "btime"     && i + 1 < tokens.size()) btime     = std::stoi(tokens[++i]);
-        if (tokens[i] == "winc"      && i + 1 < tokens.size()) winc      = std::stoi(tokens[++i]);
-        if (tokens[i] == "binc"      && i + 1 < tokens.size()) binc      = std::stoi(tokens[++i]);
-        if (tokens[i] == "movestogo" && i + 1 < tokens.size()) movestogo = std::stoi(tokens[++i]);
-        if (tokens[i] == "infinite") infinite = true;
+        try {
+            if (tokens[i] == "depth" && i + 1 < tokens.size()) {
+                depth = std::stoi(tokens[++i]);
+            } else if (tokens[i] == "movetime" && i + 1 < tokens.size()) {
+                movetime = std::stoi(tokens[++i]);
+            } else if (tokens[i] == "wtime" && i + 1 < tokens.size()) {
+                wtime = std::stoi(tokens[++i]);
+            } else if (tokens[i] == "btime" && i + 1 < tokens.size()) {
+                btime = std::stoi(tokens[++i]);
+            } else if (tokens[i] == "winc" && i + 1 < tokens.size()) {
+                winc = std::stoi(tokens[++i]);
+            } else if (tokens[i] == "binc" && i + 1 < tokens.size()) {
+                binc = std::stoi(tokens[++i]);
+            } else if (tokens[i] == "movestogo" && i + 1 < tokens.size()) {
+                movestogo = std::stoi(tokens[++i]);
+            } else if (tokens[i] == "infinite") {
+                infinite = true;
+            }
+        } catch (const std::exception&) {
+            // Arena or other GUIs might send unexpected values; skip and continue safely
+        }
     }
 
     // Time management logic
