@@ -16,6 +16,10 @@
 #include <vector>
 #include <cstdlib>
 #include <ctime>
+#include <fstream>
+
+// Debug log file — written next to the engine.exe
+static std::ofstream dbg("uci_debug.log", std::ios::app);
 
 // ============================================================================
 // Constants
@@ -263,11 +267,7 @@ void UCI::parse_go(Board& board, const std::string& command) {
 void UCI::loop(Board& board) {
     std::string line;
 
-    // Print the engine identity on startup (some GUIs expect this immediately)
-    // Uncomment the next 3 lines if your GUI sends "uci" automatically:
-    // std::cout << "id name " << ENGINE_NAME << std::endl;
-    // std::cout << "id author " << ENGINE_AUTHOR << std::endl;
-    // std::cout << "uciok" << std::endl;
+    dbg << "=== ENGINE STARTED ===" << std::endl;
 
     while (std::getline(std::cin, line)) {
         // Strip trailing whitespace / carriage return (Windows compatibility)
@@ -275,6 +275,8 @@ void UCI::loop(Board& board) {
             line.pop_back();
         }
         if (line.empty()) continue;
+
+        dbg << "RECV: [" << line << "]" << std::endl;
 
         // Extract the first word to identify the command
         std::string command_word;
@@ -287,49 +289,52 @@ void UCI::loop(Board& board) {
         if (command_word == "uci") {
             std::cout << "id name ChessEngine v1.0" << std::endl;
             std::cout << "id author Lakshya" << std::endl;
-
-            // TODO: Print any configurable options here using "option" command
-            // Example:
-            // std::cout << "option name Hash type spin default 64 min 1 max 1024" << std::endl;
-            // std::cout << "option name Threads type spin default 1 min 1 max 16" << std::endl;
-
             std::cout << "uciok" << std::endl;
+            fflush(stdout);
+            dbg << "SENT: id name + id author + uciok" << std::endl;
         }
 
-            else if (command_word == "isready") {
+        else if (command_word == "isready") {
             std::cout << "readyok" << std::endl;
+            fflush(stdout);
+            dbg << "SENT: readyok" << std::endl;
         }
 
         else if (command_word == "ucinewgame") {
             board.FEN(START_FEN);
+            clear_tt();
+            dbg << "Board reset to startpos, TT cleared" << std::endl;
         }
 
         else if (command_word == "position") {
             parse_position(board, line);
+            dbg << "Position set. side_to_move=" << board.side_to_move << std::endl;
         }
 
         // ===== go =====
         else if (command_word == "go") {
+            dbg << "Starting search..." << std::endl;
             parse_go(board, line);
+            dbg << "Search done." << std::endl;
+            fflush(stdout);
         }
 
         // ===== stop =====
         else if (command_word == "stop") {
-            // ----------------------------------------------------------
-            // TODO: Signal the search thread to stop immediately.
-            //   search_info.stopped = true;
-            // The search function should check this flag periodically.
-            // ----------------------------------------------------------
+            time_is_up = true;
+            dbg << "STOP received" << std::endl;
         }
 
         // ===== quit =====
         else if (command_word == "quit") {
+            dbg << "QUIT received" << std::endl;
             break;
         }
 
         // ===== debug / unknown =====
         else {
-            // Silently ignore unknown commands (UCI spec requires this)
+            dbg << "IGNORED: [" << command_word << "]" << std::endl;
         }
     }
+    dbg << "=== ENGINE EXITING ===" << std::endl;
 }

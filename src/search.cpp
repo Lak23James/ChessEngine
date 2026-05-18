@@ -29,6 +29,10 @@ using Move = uint16_t;
 // Definition of the transposition table declared in tt.h
 TTEntry tt[TT_SIZE];
 
+void clear_tt() {
+  std::fill(std::begin(tt), std::end(tt), TTEntry{0, 0, 0, TT_EXACT, 0});
+}
+
 // Global variable to store the best move found at the root
 Move best_move_found = 0;
 
@@ -177,7 +181,7 @@ static int quiescence(int alpha, int beta, Board &board) {
     return 0;
 
   // Prevent Quiescence Search / Check explosions from overflowing arrays
-  if (board.state_ply >= 2000) return evaluate(board);
+  if (board.state_ply >= 96) return evaluate(board);
 
   bool in_check = is_king_in_check(board);
   int stand_pat = 0;
@@ -284,7 +288,7 @@ int alpha_beta(Board &board, int depth, int alpha, int beta) {
     return 0;
 
   // Prevent deep check sequences from overflowing the history array
-  if (board.state_ply >= 2000) return evaluate(board);
+  if (board.state_ply >= 96) return evaluate(board);
 
  // 1. TT PROBE
   int tt_score = 0;
@@ -316,7 +320,9 @@ int alpha_beta(Board &board, int depth, int alpha, int beta) {
 
   for (int i = 0; i < moves.count; ++i) {
     Move move = moves.moves[i];
-    board.make_move(move);
+    if (!board.make_move(move)) {
+      continue;
+    }
     int score = -alpha_beta(board, depth - 1, -beta, -alpha);
     board.unmake_move(move);
 

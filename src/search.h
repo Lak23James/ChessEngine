@@ -9,6 +9,7 @@ extern int allocated_time_ms;
 extern bool time_is_up;
 extern long long nodes_searched;
 
+void clear_tt();
 void check_time();
 int alpha_beta(Board& board, int depth, int alpha, int beta);
 void search_position(Board& board, int max_time_ms);

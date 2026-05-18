@@ -386,6 +386,8 @@ bool Board::is_square_attacked(int square, int side) const {
     }
 }
 bool Board::make_move(uint16_t move) {
+    if (state_ply >= 2040) return false;
+
     int from_sq = get_move_from(move);
     int to_sq = get_move_to(move);
     int flag = get_move_flags(move);
@@ -544,7 +546,58 @@ bool Board::make_move(uint16_t move) {
     side_to_move = (side_to_move == WHITE) ? BLACK : WHITE;
     hash_key ^= side_key;
 
-    int king_square = (side_to_move == BLACK) ? __builtin_ctzll(bitboard[WK]) : __builtin_ctzll(bitboard[BK]);
+    // Safety: if king bitboard is 0 (should never happen), this move is illegal
+    uint64_t our_king_bb = (side_to_move == BLACK) ? bitboard[WK] : bitboard[BK];
+    if (our_king_bb == 0) {
+        // King was captured — board is corrupt. Undo everything and reject the move.
+        side_to_move = original_side;
+        enpassentsq = original_enpassentsq;
+        can_white_castle_king_side = original_castling[0];
+        can_white_castle_queen_side = original_castling[1];
+        can_black_castle_king_side = original_castling[2];
+        can_black_castle_queen_side = original_castling[3];
+        hash_key = original_hash;
+        if (was_promotion) {
+            bitboard[promoted_piece] &= ~(1ULL << to_sq);
+            bitboard[moving_piece] |= (1ULL << from_sq);
+            occupied[moving_piece / 6] |= (1ULL << from_sq);
+            occupied[moving_piece / 6] &= ~(1ULL << to_sq);
+            occupied[BOTH] &= ~(1ULL << to_sq);
+            occupied[BOTH] |= (1ULL << from_sq);
+            piece_on_square[from_sq] = moving_piece;
+            if (was_capture && captured_piece != -1) {
+                bitboard[captured_piece] |= (1ULL << capture_square);
+                occupied[captured_piece / 6] |= (1ULL << capture_square);
+                occupied[BOTH] |= (1ULL << capture_square);
+                piece_on_square[capture_square] = captured_piece;
+            } else {
+                piece_on_square[to_sq] = -1;
+            }
+        } else {
+            uint64_t unmove_mask = (1ULL << from_sq) | (1ULL << to_sq);
+            bitboard[moving_piece] ^= unmove_mask;
+            occupied[moving_piece / 6] ^= unmove_mask;
+            occupied[BOTH] ^= unmove_mask;
+            piece_on_square[from_sq] = moving_piece;
+            piece_on_square[to_sq] = -1;
+            if (was_capture && captured_piece != -1) {
+                bitboard[captured_piece] |= (1ULL << capture_square);
+                occupied[captured_piece / 6] |= (1ULL << capture_square);
+                occupied[BOTH] |= (1ULL << capture_square);
+                piece_on_square[capture_square] = captured_piece;
+            }
+        }
+        if (was_castle) {
+            uint64_t unrook_mask = (1ULL << rook_from) | (1ULL << rook_to);
+            bitboard[(original_side == WHITE) ? WR : BR] ^= unrook_mask;
+            occupied[(original_side == WHITE) ? WHITE : BLACK] ^= unrook_mask;
+            occupied[BOTH] ^= unrook_mask;
+            piece_on_square[rook_to] = -1;
+            piece_on_square[rook_from] = (original_side == WHITE) ? WR : BR;
+        }
+        return false;
+    }
+    int king_square = __builtin_ctzll(our_king_bb);
     int enemy_side = side_to_move; // side_to_move is now the enemy side (it was toggled above)
 
     if (is_square_attacked(king_square, enemy_side)) {
@@ -604,6 +657,7 @@ bool Board::make_move(uint16_t move) {
 }
 
 void Board::unmake_move(uint16_t move) {
+    if (state_ply <= 0) return;
     state_ply--;
     
     int from_sq = get_move_from(move);
