@@ -33,7 +33,7 @@ TTEntry tt[TT_SIZE];
 Move best_move_found = 0;
 
 // Probe TT
-static bool probe_tt(uint64_t key, int depth, int alpha, int beta, int &score,
+static bool probe_tt(uint64_t key, int depth, int alpha, int beta, int ply, int &score,
                      int &best_move) {
   int index = key % TT_SIZE;
   TTEntry &entry = tt[index];
@@ -41,15 +41,19 @@ static bool probe_tt(uint64_t key, int depth, int alpha, int beta, int &score,
   if (entry.key == key) {
     best_move = entry.best_move;
     if (entry.depth >= depth) {
+      int tt_score = entry.score;
+      if (tt_score > 90000) tt_score -= ply;
+      if (tt_score < -90000) tt_score += ply;
+
       if (entry.flag == TT_EXACT) {
-        score = entry.score;
+        score = tt_score;
         return true;
       }
-      if (entry.flag == TT_ALPHA && entry.score <= alpha) {
+      if (entry.flag == TT_ALPHA && tt_score <= alpha) {
         score = alpha;
         return true;
       }
-      if (entry.flag == TT_BETA && entry.score >= beta) {
+      if (entry.flag == TT_BETA && tt_score >= beta) {
         score = beta;
         return true;
       }
@@ -59,10 +63,13 @@ static bool probe_tt(uint64_t key, int depth, int alpha, int beta, int &score,
 }
 
 // Store TT
-static void store_tt(uint64_t key, int depth, int score, int flag,
+static void store_tt(uint64_t key, int depth, int ply, int score, int flag,
                      int best_move) {
   int index = key % TT_SIZE;
   TTEntry &entry = tt[index];
+
+  if (score > 90000) score += ply;
+  if (score < -90000) score -= ply;
 
   // Depth-preferred replacement strategy
   if (entry.key != key || entry.depth <= depth) {
@@ -258,7 +265,7 @@ static int quiescence(int alpha, int beta, Board &board) {
 
   // Termination of quiescence search: If we are in check and have no legal moves, this is a checkmate.
   if (in_check && legal_moves_played == 0) {
-    return -100000;
+    return -100000 + board.state_ply;
   }
 
   return alpha;
@@ -272,19 +279,13 @@ int alpha_beta(Board &board, int depth, int alpha, int beta) {
   }
   if (time_is_up)
     return 0;
-
-  // 1. TT PROBE
-  if (!time_is_up) { // ADD THIS WRAPPER
-    write_to_TT(board.hash_key, depth, alpha, FLAG_EXACT, best_move);
-}
-return alpha;
  // 1. TT PROBE
   int tt_score = 0;
   int tt_move = 0;
   
   // If the TT finds a valid entry with sufficient depth and valid bounds, 
   // it returns true. We immediately use that score.
-  if (probe_tt(board.hash_key, depth, alpha, beta, tt_score, tt_move)) {
+  if (probe_tt(board.hash_key, depth, alpha, beta, board.state_ply, tt_score, tt_move)) {
       return tt_score; 
   }
 
@@ -295,7 +296,7 @@ return alpha;
   MoveList moves = generate_legal_moves(board);
   if (moves.count == 0) {
     if (is_king_in_check(board)) {
-      return -100000 + depth;
+      return -100000 + board.state_ply;
     }
     return 0;
   }
@@ -312,9 +313,11 @@ return alpha;
     int score = -alpha_beta(board, depth - 1, -beta, -alpha);
     board.unmake_move(move);
 
+    if (time_is_up) return 0;
+
     if (score >= beta) {
       // 3. STORE TT (BETA CUTOFF)
-      store_tt(board.hash_key, depth, beta, TT_BETA, move);
+      store_tt(board.hash_key, depth, board.state_ply, beta, TT_BETA, move);
       return beta;
     }
     if (score > alpha) {
@@ -324,12 +327,13 @@ return alpha;
     
   }
 
-  // 4. STORE TT (EXACT or ALPHA)
-  int flag = (alpha <= original_alpha) ? TT_ALPHA : TT_EXACT;
-  store_tt(board.hash_key, depth, alpha, flag, best_move);
+ // 4. STORE TT (EXACT or ALPHA)
+  if (!time_is_up) {
+      int flag = (alpha <= original_alpha) ? TT_ALPHA : TT_EXACT;
+      store_tt(board.hash_key, depth, board.state_ply, alpha, flag, best_move);
+  }
 
-  return alpha;
-}
+  return alpha;}
 
 // 3. ROOT SEARCH (Public Interface - External Linkage)
 void search_position(Board &board, int max_time_ms) {
@@ -337,9 +341,12 @@ void search_position(Board &board, int max_time_ms) {
   time_is_up = false;
   nodes_searched = 0;
   start_time = std::chrono::high_resolution_clock::now();
-
+   
   int best_move_overall = 0;
-
+  MoveList root_moves = generate_legal_moves(board);
+  if (root_moves.count > 0) {
+      best_move_overall = root_moves.moves[0];
+  }
   for (int current_depth = 1; current_depth <= 64; ++current_depth) {
     int current_score = alpha_beta(board, current_depth, -500000, 500000);
 

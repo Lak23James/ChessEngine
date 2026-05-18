@@ -60,6 +60,8 @@ static bool promotion_matches(uint16_t move, char promotion_char) {
 }
 
 std::string uci_move_to_string(uint16_t move) {
+    if (move == 0) return "0000";
+
     static const char file_chars[] = "abcdefgh";
     int from = get_move_from(move);
     int to = get_move_to(move);

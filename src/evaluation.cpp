@@ -1,4 +1,4 @@
-S#include "bitboard.h"
+#include "bitboard.h"
 #include "evaluate.h"
 
 // --- BASE MATERIAL VALUES ---
@@ -161,11 +161,27 @@ int get_game_phase(Board& board) {
     
     return phase;
 }
+
+
+
+
+int evaluate_material(Board& board, const int material_weights[6]) {
+    int score = 0;
+    
+    // Calculate material difference for each piece type and multiply by the appropriate PeSTO weight
+    score += (__builtin_popcountll(board.get_white_pawns())   - __builtin_popcountll(board.get_black_pawns()))   * material_weights[0];
+    score += (__builtin_popcountll(board.get_white_knights()) - __builtin_popcountll(board.get_black_knights())) * material_weights[1];
+    score += (__builtin_popcountll(board.get_white_bishops()) - __builtin_popcountll(board.get_black_bishops())) * material_weights[2];
+    score += (__builtin_popcountll(board.get_white_rooks())   - __builtin_popcountll(board.get_black_rooks()))   * material_weights[3];
+    score += (__builtin_popcountll(board.get_white_queens())  - __builtin_popcountll(board.get_black_queens()))  * material_weights[4];
+    
+    return score;
+}
 int evaluate_middlegame(Board& board) {
     int score = 0;
     uint64_t bb;
     int sq;
-
+   int material = evaluate_material(board, MG_MATERIAL);
     // --- KNIGHTS ---
     bb = board.get_white_knights();
     while (bb) {
@@ -251,13 +267,30 @@ int evaluate_middlegame(Board& board) {
         score -= mg_king_table[mirrored_sq]; 
         bb &= bb - 1;
     }
-    return score;
+    return score + material;
 }
 
 int evaluate_endgame(Board& board) {
     int score = 0;
     uint64_t bb;
     int sq;
+    int material = evaluate_material(board, EG_MATERIAL);
+
+    // --- PAWNS ---
+    bb = board.get_white_pawns();
+    while (bb) {
+        sq = __builtin_ctzll(bb);
+        score += eg_pawn_table[sq]; 
+        bb &= bb - 1; 
+    }
+
+    bb = board.get_black_pawns();
+    while (bb) {
+        sq = __builtin_ctzll(bb);
+        int mirrored_sq = sq ^ 56;
+        score -= eg_pawn_table[mirrored_sq]; 
+        bb &= bb - 1;
+    }
 
     // --- KNIGHTS ---
     bb = board.get_white_knights();
@@ -328,8 +361,7 @@ int evaluate_endgame(Board& board) {
         score -=eg_king_table[mirrored_sq]; 
         bb &= bb - 1;
     }
-    
-    return score;
+    return score + material;
 }
 int evaluate(Board& board) {
     int phase = get_game_phase(board);
